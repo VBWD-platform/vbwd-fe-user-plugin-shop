@@ -1,0 +1,6 @@
+{
+  "products_per_page": 12,
+  "show_out_of_stock": true,
+  "default_catalog_view": "grid",
+  "cart_sync_on_login": true
+}

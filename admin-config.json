@@ -1,0 +1,17 @@
+{
+  "tabs": [
+    {
+      "id": "catalog",
+      "label": "Catalog Display",
+      "fields": [
+        { "key": "products_per_page", "label": "Products Per Page", "component": "input", "inputType": "number", "min": 4, "max": 48 },
+        { "key": "default_catalog_view", "label": "Default View", "component": "select", "options": [
+          { "value": "grid", "label": "Grid" },
+          { "value": "list", "label": "List" }
+        ]},
+        { "key": "show_out_of_stock", "label": "Show Out-of-Stock Products", "component": "checkbox" },
+        { "key": "cart_sync_on_login", "label": "Sync Cart on Login", "component": "checkbox" }
+      ]
+    }
+  ]
+}
