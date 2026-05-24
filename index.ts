@@ -1,4 +1,6 @@
 import type { IPlugin, IPlatformSDK } from 'vbwd-view-component';
+import { checkoutSourceRegistry } from '@/registries/checkoutSourceRegistry';
+import { shopCheckoutSource } from './shop/checkoutSource';
 
 export const shopPlugin: IPlugin = {
   name: 'shop',
@@ -68,8 +70,14 @@ export const shopPlugin: IPlugin = {
       .catch(() => {
         // CMS plugin not installed — skip widget registration
       });
+
+    // Register the shop checkout source so the generic public /checkout page
+    // can purchase the shop cart without core knowing about ecommerce.
+    checkoutSourceRegistry.register(shopCheckoutSource);
   },
 
   activate() {},
-  deactivate() {},
+  deactivate() {
+    checkoutSourceRegistry.unregister('shop');
+  },
 };
