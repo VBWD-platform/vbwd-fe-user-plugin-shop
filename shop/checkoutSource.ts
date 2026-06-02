@@ -4,7 +4,7 @@
  * anything about ecommerce. Derives line items from the shop cart store and
  * submits to the ecommerce endpoint.
  */
-import { defineAsyncComponent } from 'vue';
+import { defineAsyncComponent, ref } from 'vue';
 import { api } from '@/api';
 import {
   type CheckoutSource,
@@ -12,6 +12,11 @@ import {
   type LineItem,
 } from '@/registries/checkoutSourceRegistry';
 import { useCartStore } from './stores/cart';
+
+// Coupon state for the shop source (the cart store persists items; the coupon
+// is per-checkout-visit, so module-level reactive state is enough).
+const shopDiscount = ref(0);
+const shopCouponCode = ref<string | null>(null);
 
 export const shopCheckoutSource: CheckoutSource = {
   id: 'shop',
@@ -38,7 +43,32 @@ export const shopCheckoutSource: CheckoutSource = {
     }));
   },
 
-  getOrderTotal: () => useCartStore().subtotal,
+  // Net total (gross cart subtotal minus any applied coupon discount).
+  getOrderTotal: () => Math.max(0, useCartStore().subtotal - shopDiscount.value),
+
+  getDiscountAmount: () => shopDiscount.value,
+
+  async applyCoupon(code: string): Promise<{ valid: boolean; discountAmount: number; error?: string }> {
+    const cart = useCartStore();
+    const response = (await api.post('/coupons/validate', {
+      code,
+      cart_total: cart.subtotal,
+      scope: 'ECOMMERCE',
+    })) as { valid: boolean; discount_amount?: string; error?: string };
+    if (response.valid) {
+      shopDiscount.value = Number(response.discount_amount || 0);
+      shopCouponCode.value = code;
+      return { valid: true, discountAmount: shopDiscount.value };
+    }
+    shopDiscount.value = 0;
+    shopCouponCode.value = null;
+    return { valid: false, discountAmount: 0, error: response.error };
+  },
+
+  clearCoupon(): void {
+    shopDiscount.value = 0;
+    shopCouponCode.value = null;
+  },
 
   async submit(paymentMethodCode): Promise<CheckoutResult> {
     const cart = useCartStore();
@@ -52,6 +82,9 @@ export const shopCheckoutSource: CheckoutSource = {
     if (paymentMethodCode) {
       payload.payment_method_code = paymentMethodCode;
     }
+    if (shopCouponCode.value) {
+      payload.coupon_code = shopCouponCode.value;
+    }
 
     const response = (await api.post('/shop/cart/checkout', payload)) as {
       invoice_id: string;
@@ -60,6 +93,8 @@ export const shopCheckoutSource: CheckoutSource = {
     };
 
     cart.clearCart();
+    shopDiscount.value = 0;
+    shopCouponCode.value = null;
 
     return {
       invoice: {
@@ -75,8 +110,11 @@ export const shopCheckoutSource: CheckoutSource = {
     };
   },
 
-  // The cart store persists to localStorage; nothing to reset between visits.
-  reset: () => {},
+  // The cart store persists to localStorage; only the coupon resets between visits.
+  reset: () => {
+    shopDiscount.value = 0;
+    shopCouponCode.value = null;
+  },
 
   summaryComponent: defineAsyncComponent(
     () => import('./components/ShopCheckoutSummary.vue')

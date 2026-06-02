@@ -15,9 +15,8 @@
       </span>
       <span>{{ formatPrice(item.price * item.quantity, item.currency) }}</span>
     </div>
-    <div class="total">
-      <strong>{{ $t('checkout.success.totalLabel') }} {{ formatPrice(cart.subtotal, 'EUR') }}</strong>
-    </div>
+    <!-- The net order total (and any discount row) is rendered by the checkout
+         view from the agnostic core store — no duplicate gross total here. -->
   </div>
 </template>
 
