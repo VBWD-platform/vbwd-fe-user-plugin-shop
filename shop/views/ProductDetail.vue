@@ -67,7 +67,13 @@
           class="product-detail__price"
           data-testid="product-detail-price"
         >
-          {{ formatPrice(product.price, product.currency) }}
+          <PriceDisplay
+            :effective-display-mode="product.pricing?.effective_display_mode"
+            :global-mode="product.pricing?.prices_display_mode"
+            :net-amount="product.pricing?.net_amount ?? product.price"
+            :gross-amount="product.pricing?.gross_amount ?? product.price"
+            :currency="product.currency"
+          />
         </p>
 
         <p
@@ -76,6 +82,19 @@
         >
           {{ product.description }}
         </p>
+
+        <!-- S77 — tags + custom fields from the serialized payload (no extra fetch) -->
+        <TagChips
+          v-if="product.tags && product.tags.length"
+          :tags="product.tags"
+          class="product-detail__tags"
+        />
+        <CustomFieldsDisplay
+          v-if="product.custom_fields"
+          :custom-fields="product.custom_fields"
+          :field-defs="product.custom_field_defs"
+          class="product-detail__custom-fields"
+        />
 
         <span
           class="product-detail__stock"
@@ -113,6 +132,8 @@ import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '@/api';
 import { useCartStore } from '../stores/cart';
+import PriceDisplay from '@/components/PriceDisplay.vue';
+import { TagChips, CustomFieldsDisplay, type CustomFieldDef } from 'vbwd-view-component';
 
 interface ProductVariant {
   id: string;
@@ -129,8 +150,8 @@ interface ProductInfo {
   slug: string;
   name: string;
   description: string;
-  price: string;
-  price_float: number;
+  // S85.1 — raw double (e.g. 18.99); product-level ``price_float`` was dropped.
+  price: number;
   currency: string;
   primary_image_url: string | null;
   images: Array<{ id: string; url: string; alt: string }>;
@@ -139,6 +160,18 @@ interface ProductInfo {
   stock_available?: number;
   is_digital: boolean;
   weight: string | null;
+  // S72.4 netto/brutto display + S85.4 per-rate tax split
+  pricing?: {
+    net_amount: string;
+    gross_amount: string;
+    effective_display_mode?: 'netto' | 'brutto';
+    prices_display_mode?: 'netto' | 'brutto';
+    taxes?: Array<{ code: string; rate: string; amount: string }>;
+  };
+  // S77 — appended by the backend serializer via append_tags_and_custom_fields
+  tags?: string[];
+  custom_fields?: Record<string, unknown>;
+  custom_field_defs?: CustomFieldDef[];
 }
 
 const route = useRoute();
@@ -177,21 +210,39 @@ async function fetchProduct() {
   }
 }
 
-function formatPrice(price: string | number, currency: string): string {
-  const num = typeof price === 'string' ? parseFloat(price) : price;
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'EUR' }).format(num);
-}
-
 function handleAddToCart(): void {
   if (!product.value || addedFeedback.value) return;
   const variant = product.value.variants.find(v => v.id === selectedVariantId.value);
+
+  // S85.4 — thread the product's computed net/gross/taxes split + display-mode
+  // pair (already on the payload) into the cart line so the checkout summary can
+  // disclose tax and pick the viewer side. No tax math — just parse the amounts.
+  const pricing = product.value.pricing;
+  const pricingFields = pricing
+    ? {
+        netAmount: Number(pricing.net_amount),
+        grossAmount: Number(pricing.gross_amount),
+        effectiveDisplayMode: pricing.effective_display_mode,
+        pricesDisplayMode: pricing.prices_display_mode,
+        taxes: (pricing.taxes ?? []).map((tax) => ({
+          code: tax.code,
+          rate: tax.rate,
+          amount: Number(tax.amount),
+        })),
+      }
+    : {};
 
   cartStore.addItem({
     productId: product.value.id,
     productSlug: product.value.slug,
     productName: variant ? `${product.value.name} — ${variant.name}` : product.value.name,
     imageUrl: product.value.primary_image_url || '',
-    price: variant?.price_float || product.value.price_float,
+    // S85.1 dropped product-level ``price_float``; the charge basis is now the
+    // GROSS amount from the pricing block (D8), falling back to the raw price.
+    // A selected variant still carries its own price after S85.1, so prefer it.
+    price: variant
+      ? Number(variant.price_float ?? variant.price ?? 0)
+      : Number(product.value.pricing?.gross_amount ?? product.value.price ?? 0),
     currency: product.value.currency,
     quantity: quantity.value,
     maxQuantity: stockCount.value || 999,
@@ -199,6 +250,7 @@ function handleAddToCart(): void {
     weight: parseFloat(product.value.weight || '0'),
     variantId: selectedVariantId.value || undefined,
     variantName: variant?.name,
+    ...pricingFields,
   });
 
   addedFeedback.value = true;
@@ -354,3 +406,4 @@ onMounted(fetchProduct);
   }
 }
 </style>
+|

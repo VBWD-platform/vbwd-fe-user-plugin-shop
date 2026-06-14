@@ -69,7 +69,12 @@
               {{ item.variantName }}
             </span>
             <span class="cart-item__price">
-              {{ formatPrice(item.price, item.currency) }}
+              <PriceDisplay
+                :net-amount="item.price"
+                :gross-amount="item.price"
+                :currency="item.currency || defaultCurrency"
+                :account-type="authStore.user?.account_type"
+              />
             </span>
           </div>
 
@@ -100,7 +105,12 @@
             class="cart-item__subtotal"
             data-testid="cart-item-subtotal"
           >
-            {{ formatPrice(item.price * item.quantity, item.currency) }}
+            <PriceDisplay
+              :net-amount="item.price * item.quantity"
+              :gross-amount="item.price * item.quantity"
+              :currency="item.currency || defaultCurrency"
+              :account-type="authStore.user?.account_type"
+            />
           </span>
 
           <button
@@ -121,7 +131,13 @@
           class="shopping-cart__subtotal"
           data-testid="shopping-cart-subtotal"
         >
-          Subtotal ({{ cartStore.itemCount }} items): {{ formatPrice(cartStore.subtotal, defaultCurrency) }}
+          Subtotal ({{ cartStore.itemCount }} items):
+          <PriceDisplay
+            :net-amount="cartStore.subtotal"
+            :gross-amount="cartStore.subtotal"
+            :currency="defaultCurrency"
+            :account-type="authStore.user?.account_type"
+          />
         </span>
         <button
           class="shopping-cart__checkout-btn"
@@ -137,19 +153,22 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { useAuthStore } from 'vbwd-view-component';
 import { useCartStore, type CartItem } from '../stores/cart';
+import PriceDisplay from '@/components/PriceDisplay.vue';
 
 const cartStore = useCartStore();
+const authStore = useAuthStore();
 const router = useRouter();
 
+// FLAG: the shop cart carries only gross prices (per-item ``price`` and the
+// gross ``subtotal``) — no net/tax/gross split — so every figure uses
+// <PriceDisplay> (net == gross). The business-viewer overlay applies via
+// accountType; a detailed <PriceBreakdown> needs cart-level tax data.
 const defaultCurrency = 'EUR';
 
 function itemKey(item: CartItem): string {
   return `${item.productId}-${item.variantId ?? 'default'}`;
-}
-
-function formatPrice(price: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(price);
 }
 
 function handleCheckout() {

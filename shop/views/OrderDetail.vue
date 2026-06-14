@@ -85,18 +85,39 @@
               class="order-item__price"
               data-testid="order-detail-item-price"
             >
-              {{ formatPrice(item.price * item.quantity, order.currency) }}
+              <PriceDisplay
+                :net-amount="item.price * item.quantity"
+                :gross-amount="item.price * item.quantity"
+                :currency="order.currency"
+                :account-type="authStore.user?.account_type"
+              />
             </span>
           </li>
         </ul>
       </div>
 
       <div class="order-detail__summary">
+        <!-- If the order carries a persisted net/tax/gross breakdown, disclose
+             it; otherwise (FLAG: shop orders carry only the gross ``total``) fall
+             back to the single-figure total threaded with the viewer side. -->
+        <PriceBreakdown
+          v-if="orderBreakdownPrice"
+          class="order-detail__breakdown"
+          data-testid="order-detail-breakdown"
+          :price="orderBreakdownPrice"
+        />
         <span
+          v-else
           class="order-detail__total"
           data-testid="order-detail-total"
         >
-          Total: {{ formatPrice(order.total, order.currency) }}
+          Total:
+          <PriceDisplay
+            :net-amount="order.total"
+            :gross-amount="order.total"
+            :currency="order.currency"
+            :account-type="authStore.user?.account_type"
+          />
         </span>
         <span
           class="order-detail__date"
@@ -110,8 +131,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { useAuthStore } from 'vbwd-view-component';
+import PriceDisplay from '@/components/PriceDisplay.vue';
+import PriceBreakdown from '@/components/PriceBreakdown.vue';
+import type { PriceVO } from '@/utils/priceDisplay';
 
 interface OrderItem {
   id: string;
@@ -130,6 +155,9 @@ interface OrderInfo {
   orderNumber: string;
   status: string;
   total: number;
+  // S85 persisted net / tax totals — not present on the shop order today (FLAG).
+  subtotal?: number;
+  taxAmount?: number;
   currency: string;
   createdAt: string;
   items: OrderItem[];
@@ -137,15 +165,27 @@ interface OrderInfo {
 }
 
 const route = useRoute();
+const authStore = useAuthStore();
 const orderId = route.params.id as string;
 
 const loading = ref(false);
 const error = ref<string | null>(null);
 const order = ref<OrderInfo | null>(null);
 
-function formatPrice(price: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(price);
-}
+// Build a totals-level Price VO ONLY when the order carries a persisted net/tax
+// split; otherwise null → the view falls back to a single-figure total. No
+// fe-side tax math: the tax line is the verbatim ``taxAmount``.
+const orderBreakdownPrice = computed<PriceVO | null>(() => {
+  const current = order.value;
+  if (!current || current.subtotal === undefined) return null;
+  const tax = current.taxAmount ?? 0;
+  return {
+    netto: current.subtotal,
+    taxes: tax > 0 ? [{ code: 'TAX', rate: 0, amount: tax }] : [],
+    brutto: current.total,
+    currency: current.currency,
+  };
+});
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString(undefined, {

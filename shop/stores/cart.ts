@@ -1,5 +1,12 @@
 import { defineStore } from 'pinia';
 
+/** One applied tax line carried from the product ``pricing`` block (S85.4). */
+export interface CartItemTax {
+  code: string;
+  rate: string;
+  amount: number;
+}
+
 export interface CartItem {
   productId: string;
   productSlug: string;
@@ -13,6 +20,16 @@ export interface CartItem {
   weight: number;
   variantId?: string;
   variantName?: string;
+  // S85.4 — the product's computed net/gross/taxes split + display-mode pair,
+  // threaded from the product ``pricing`` payload at add-to-cart so the checkout
+  // summary can disclose tax and pick the viewer side. The cart is the single
+  // source of truth; these are display data only (no tax math here). Absent for
+  // products whose payload carried no pricing block.
+  netAmount?: number;
+  grossAmount?: number;
+  taxes?: CartItemTax[];
+  effectiveDisplayMode?: 'netto' | 'brutto';
+  pricesDisplayMode?: 'netto' | 'brutto';
 }
 
 const STORAGE_KEY = 'vbwd_shop_cart';

@@ -124,4 +124,43 @@ describe('useCartStore', () => {
     expect(store.items).toHaveLength(2)
     expect(store.itemCount).toBe(2)
   })
+
+  // S85.4 — the cart item carries the product's net/gross/taxes/display-mode
+  // split (threaded from the product payload at add-to-cart) so the checkout
+  // summary can show the tax disclosure and the correct viewer side. The cart
+  // stays the single source of truth; no tax math here.
+  it('carries the net/gross/taxes/mode split when provided', () => {
+    const store = useCartStore()
+    store.addItem({
+      ...mockItem,
+      netAmount: 100,
+      grossAmount: 119,
+      taxes: [{ code: 'VAT', rate: '19.00', amount: 19 }],
+      effectiveDisplayMode: 'netto',
+      pricesDisplayMode: 'brutto',
+    })
+
+    const stored = store.items[0]
+    expect(stored.netAmount).toBe(100)
+    expect(stored.grossAmount).toBe(119)
+    expect(stored.taxes).toEqual([{ code: 'VAT', rate: '19.00', amount: 19 }])
+    expect(stored.effectiveDisplayMode).toBe('netto')
+    expect(stored.pricesDisplayMode).toBe('brutto')
+  })
+
+  it('persists the split fields to localStorage', () => {
+    const store = useCartStore()
+    store.addItem({
+      ...mockItem,
+      netAmount: 100,
+      grossAmount: 119,
+      taxes: [{ code: 'VAT', rate: '19.00', amount: 19 }],
+      effectiveDisplayMode: 'netto',
+      pricesDisplayMode: 'brutto',
+    })
+
+    const restored = JSON.parse(localStorage.getItem('vbwd_shop_cart') || '[]')
+    expect(restored[0].grossAmount).toBe(119)
+    expect(restored[0].taxes[0].amount).toBe(19)
+  })
 })

@@ -11,6 +11,8 @@ import {
   type CheckoutResult,
   type LineItem,
 } from '@/registries/checkoutSourceRegistry';
+import { aggregatePrice } from '@/utils/aggregatePrice';
+import type { PriceVO } from '@/utils/priceDisplay';
 import { useCartStore } from './stores/cart';
 
 // Coupon state for the shop source (the cart store persists items; the coupon
@@ -47,6 +49,32 @@ export const shopCheckoutSource: CheckoutSource = {
   getOrderTotal: () => Math.max(0, useCartStore().subtotal - shopDiscount.value),
 
   getDiscountAmount: () => shopDiscount.value,
+
+  // Order-level tax breakdown across all cart lines. Each line's per-unit Price
+  // VO is built from the split the cart carries (netto=netAmount??price,
+  // brutto=grossAmount??price, taxes with Number(rate)); the shared aggregator
+  // sums them by code+rate. Display only — never recomputes tax.
+  getTaxBreakdown(): PriceVO {
+    const cart = useCartStore();
+    return aggregatePrice(
+      cart.items.map((item) => ({
+        priceVO: {
+          netto: item.netAmount ?? item.price,
+          taxes: (item.taxes ?? []).map((tax) => ({
+            code: tax.code,
+            rate: Number(tax.rate),
+            amount: tax.amount,
+          })),
+          brutto: item.grossAmount ?? item.price,
+          currency: item.currency || 'EUR',
+        },
+        grossFallback: item.price,
+        quantity: item.quantity,
+        currency: item.currency || 'EUR',
+      })),
+      'EUR',
+    );
+  },
 
   async applyCoupon(code: string): Promise<{ valid: boolean; discountAmount: number; error?: string }> {
     const cart = useCartStore();

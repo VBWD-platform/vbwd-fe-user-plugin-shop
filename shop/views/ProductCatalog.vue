@@ -99,7 +99,13 @@
             class="product-card__price"
             data-testid="product-card-price"
           >
-            {{ formatPrice(product.price, product.currency) }}
+            <PriceDisplay
+              :effective-display-mode="product.pricing?.effective_display_mode"
+              :global-mode="product.pricing?.prices_display_mode"
+              :net-amount="product.pricing?.net_amount ?? product.price"
+              :gross-amount="product.pricing?.gross_amount ?? product.price"
+              :currency="product.currency"
+            />
           </p>
         </div>
       </router-link>
@@ -111,6 +117,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '@/api';
+import PriceDisplay from '@/components/PriceDisplay.vue';
 
 interface ProductListItem {
   id: string;
@@ -120,6 +127,13 @@ interface ProductListItem {
   currency: string;
   primary_image_url: string | null;
   is_active: boolean;
+  // S72.4 netto/brutto display (embedded by the list endpoint)
+  pricing?: {
+    net_amount: string;
+    gross_amount: string;
+    effective_display_mode?: 'netto' | 'brutto';
+    prices_display_mode?: 'netto' | 'brutto';
+  };
 }
 
 const route = useRoute();
@@ -159,11 +173,6 @@ async function fetchProducts() {
   } finally {
     loading.value = false;
   }
-}
-
-function formatPrice(price: string | number, currency: string): string {
-  const num = typeof price === 'string' ? parseFloat(price) : price;
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'EUR' }).format(num);
 }
 
 onMounted(fetchProducts);
