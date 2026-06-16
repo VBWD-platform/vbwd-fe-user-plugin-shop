@@ -70,12 +70,23 @@
             </span>
             <span class="cart-item__price">
               <PriceDisplay
-                :net-amount="item.price"
-                :gross-amount="item.price"
+                :net-amount="lineNet(item)"
+                :gross-amount="lineGross(item)"
+                :effective-display-mode="item.effectiveDisplayMode"
+                :global-mode="item.pricesDisplayMode"
                 :currency="item.currency || defaultCurrency"
                 :account-type="authStore.user?.account_type"
               />
             </span>
+            <!-- Per-line tax disclosure: net + one line per tax rate + gross,
+                 from the split the cart item already carries (display sum only,
+                 no fe-side tax math). Hidden for an untaxed/split-less line. -->
+            <PriceBreakdown
+              v-if="lineBreakdown(item).taxes.length > 0"
+              :price="lineBreakdown(item)"
+              class="cart-item__breakdown"
+              data-testid="cart-item-breakdown"
+            />
           </div>
 
           <div
@@ -106,8 +117,10 @@
             data-testid="cart-item-subtotal"
           >
             <PriceDisplay
-              :net-amount="item.price * item.quantity"
-              :gross-amount="item.price * item.quantity"
+              :net-amount="lineNet(item) * item.quantity"
+              :gross-amount="lineGross(item) * item.quantity"
+              :effective-display-mode="item.effectiveDisplayMode"
+              :global-mode="item.pricesDisplayMode"
               :currency="item.currency || defaultCurrency"
               :account-type="authStore.user?.account_type"
             />
@@ -133,9 +146,9 @@
         >
           Subtotal ({{ cartStore.itemCount }} items):
           <PriceDisplay
-            :net-amount="cartStore.subtotal"
-            :gross-amount="cartStore.subtotal"
-            :currency="defaultCurrency"
+            :net-amount="orderPrice.netto"
+            :gross-amount="orderPrice.brutto"
+            :currency="orderPrice.currency || defaultCurrency"
             :account-type="authStore.user?.account_type"
           />
         </span>
@@ -152,24 +165,83 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from 'vbwd-view-component';
 import { useCartStore, type CartItem } from '../stores/cart';
 import PriceDisplay from '@/components/PriceDisplay.vue';
+import PriceBreakdown from '@/components/PriceBreakdown.vue';
+import { aggregatePrice } from '@/utils/aggregatePrice';
+import type { PriceVO } from '@/utils/priceDisplay';
 
 const cartStore = useCartStore();
 const authStore = useAuthStore();
 const router = useRouter();
 
-// FLAG: the shop cart carries only gross prices (per-item ``price`` and the
-// gross ``subtotal``) — no net/tax/gross split — so every figure uses
-// <PriceDisplay> (net == gross). The business-viewer overlay applies via
-// accountType; a detailed <PriceBreakdown> needs cart-level tax data.
+// Each cart item carries the product's computed net/gross/taxes split (S85.4);
+// when absent (older carts) a line's net == gross == its bare ``price``.
 const defaultCurrency = 'EUR';
 
 function itemKey(item: CartItem): string {
   return `${item.productId}-${item.variantId ?? 'default'}`;
 }
+
+function lineNet(item: CartItem): number {
+  return item.netAmount ?? item.price;
+}
+
+function lineGross(item: CartItem): number {
+  return item.grossAmount ?? item.price;
+}
+
+// A single cart line's per-unit Price VO for its own <PriceBreakdown> — a
+// display sum of the per-line ``taxes`` the cart carries, never a tax computation.
+function lineBreakdown(item: CartItem): PriceVO {
+  return aggregatePrice(
+    [
+      {
+        priceVO: {
+          netto: lineNet(item),
+          taxes: (item.taxes ?? []).map((tax) => ({
+            code: tax.code,
+            rate: Number(tax.rate),
+            amount: tax.amount,
+          })),
+          brutto: lineGross(item),
+          currency: item.currency || defaultCurrency,
+        },
+        grossFallback: item.price,
+        quantity: item.quantity,
+        currency: item.currency || defaultCurrency,
+      },
+    ],
+    item.currency || defaultCurrency,
+  );
+}
+
+// The order-level net/gross aggregate (display sum of the per-line splits) so
+// the footer subtotal picks the correct viewer side. Falls back to bare gross
+// per line when a split is absent — same shared aggregator as the checkout.
+const orderPrice = computed<PriceVO>(() =>
+  aggregatePrice(
+    cartStore.items.map((item) => ({
+      priceVO: {
+        netto: lineNet(item),
+        taxes: (item.taxes ?? []).map((tax) => ({
+          code: tax.code,
+          rate: Number(tax.rate),
+          amount: tax.amount,
+        })),
+        brutto: lineGross(item),
+        currency: item.currency || defaultCurrency,
+      },
+      grossFallback: item.price,
+      quantity: item.quantity,
+      currency: item.currency || defaultCurrency,
+    })),
+    cartStore.items[0]?.currency || defaultCurrency,
+  ),
+);
 
 function handleCheckout() {
   // Navigate to the checkout page — it handles auth (EmailBlock) + payment
@@ -259,6 +331,11 @@ function handleCheckout() {
 .cart-item__price {
   font-size: 0.8125rem;
   color: var(--vbwd-text-secondary, #666);
+}
+
+.cart-item__breakdown {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
 }
 
 .cart-item__quantity {

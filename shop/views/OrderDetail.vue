@@ -86,8 +86,8 @@
               data-testid="order-detail-item-price"
             >
               <PriceDisplay
-                :net-amount="item.price * item.quantity"
-                :gross-amount="item.price * item.quantity"
+                :net-amount="lineNet(item) * item.quantity"
+                :gross-amount="lineGross(item) * item.quantity"
                 :currency="order.currency"
                 :account-type="authStore.user?.account_type"
               />
@@ -136,13 +136,27 @@ import { useRoute } from 'vue-router';
 import { useAuthStore } from 'vbwd-view-component';
 import PriceDisplay from '@/components/PriceDisplay.vue';
 import PriceBreakdown from '@/components/PriceBreakdown.vue';
+import { aggregatePrice } from '@/utils/aggregatePrice';
 import type { PriceVO } from '@/utils/priceDisplay';
+
+/** One applied tax line carried from the order line's persisted breakdown. */
+interface OrderItemTax {
+  code: string;
+  name?: string;
+  rate: string | number;
+  amount: number;
+}
 
 interface OrderItem {
   id: string;
   productName: string;
   quantity: number;
   price: number;
+  // S96.4 — the persisted per-line net/gross/taxes split (S85). Absent for
+  // older orders, in which case the line shows net == gross == ``price``.
+  netAmount?: number;
+  grossAmount?: number;
+  taxes?: OrderItemTax[];
 }
 
 interface TrackingInfo {
@@ -155,7 +169,8 @@ interface OrderInfo {
   orderNumber: string;
   status: string;
   total: number;
-  // S85 persisted net / tax totals — not present on the shop order today (FLAG).
+  // S85 persisted order-level net / tax totals (fallback when the item lines
+  // carry no per-rate ``taxes`` split).
   subtotal?: number;
   taxAmount?: number;
   currency: string;
@@ -164,20 +179,62 @@ interface OrderInfo {
   tracking: TrackingInfo | null;
 }
 
+// The order is fed via an optional prop (a display-only seam mirrored by the
+// live fetch, so the netto/tax/brutto disclosure is unit-testable).
+const props = defineProps<{ order?: OrderInfo | null }>();
+
 const route = useRoute();
 const authStore = useAuthStore();
 const orderId = route.params.id as string;
 
 const loading = ref(false);
 const error = ref<string | null>(null);
-const order = ref<OrderInfo | null>(null);
+const fetchedOrder = ref<OrderInfo | null>(null);
+const order = computed<OrderInfo | null>(() => props.order ?? fetchedOrder.value);
 
-// Build a totals-level Price VO ONLY when the order carries a persisted net/tax
-// split; otherwise null → the view falls back to a single-figure total. No
-// fe-side tax math: the tax line is the verbatim ``taxAmount``.
+function lineNet(item: OrderItem): number {
+  return item.netAmount ?? item.price;
+}
+
+function lineGross(item: OrderItem): number {
+  return item.grossAmount ?? item.price;
+}
+
+function hasItemTaxSplit(current: OrderInfo): boolean {
+  return current.items.some((item) => (item.taxes?.length ?? 0) > 0);
+}
+
+// Build the order-level Price VO. Prefer the persisted per-line ``taxes`` split
+// (summed via the shared aggregator → real per-rate lines); otherwise fall back
+// to the persisted order-level net/tax totals; otherwise null → single total.
+// No fe-side tax math anywhere — only a display sum of persisted amounts.
 const orderBreakdownPrice = computed<PriceVO | null>(() => {
   const current = order.value;
-  if (!current || current.subtotal === undefined) return null;
+  if (!current) return null;
+
+  if (hasItemTaxSplit(current)) {
+    return aggregatePrice(
+      current.items.map((item) => ({
+        priceVO: {
+          netto: lineNet(item),
+          taxes: (item.taxes ?? []).map((tax) => ({
+            code: tax.code,
+            name: tax.name,
+            rate: Number(tax.rate),
+            amount: tax.amount,
+          })),
+          brutto: lineGross(item),
+          currency: current.currency,
+        },
+        grossFallback: item.price,
+        quantity: item.quantity,
+        currency: current.currency,
+      })),
+      current.currency,
+    );
+  }
+
+  if (current.subtotal === undefined) return null;
   const tax = current.taxAmount ?? 0;
   return {
     netto: current.subtotal,
