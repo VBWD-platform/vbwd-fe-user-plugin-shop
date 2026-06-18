@@ -15,11 +15,12 @@
       </span>
       <span>
         <PriceDisplay
+          convert-to-display
           :net-amount="lineNet(item) * item.quantity"
           :gross-amount="lineGross(item) * item.quantity"
           :effective-display-mode="item.effectiveDisplayMode"
           :global-mode="item.pricesDisplayMode"
-          :currency="item.currency || 'EUR'"
+          :currency="lineCurrency(item)"
           :account-type="authStore.user?.account_type"
         />
       </span>
@@ -29,6 +30,7 @@
            per-line breakdown there (avoids duplication). -->
       <PriceBreakdown
         v-if="isHeterogeneous && lineBreakdown(item).taxes.length > 0"
+        convert-to-display
         :price="lineBreakdown(item)"
         class="line-breakdown"
       />
@@ -53,6 +55,7 @@
 import { computed } from 'vue';
 import { useAuthStore } from 'vbwd-view-component';
 import { useCartStore, type CartItem } from '../stores/cart';
+import { useAppConfigStore } from '@/stores/appConfig';
 import PriceDisplay from '@/components/PriceDisplay.vue';
 import PriceBreakdown from '@/components/PriceBreakdown.vue';
 import { aggregatePrice } from '@/utils/aggregatePrice';
@@ -60,6 +63,12 @@ import type { PriceVO } from '@/utils/priceDisplay';
 
 const cart = useCartStore();
 const authStore = useAuthStore();
+const appConfig = useAppConfigStore();
+
+// Resolve: the line's own currency, else the billing default (S99).
+function lineCurrency(item: CartItem): string {
+  return item.currency || appConfig.defaultCurrency;
+}
 
 // A line's net/gross fall back to its bare gross ``price`` (net == gross) when
 // the product carried no pricing split — keeps older carts rendering correctly.
@@ -85,14 +94,14 @@ function lineBreakdown(item: CartItem): PriceVO {
             amount: tax.amount,
           })),
           brutto: lineGross(item),
-          currency: item.currency || 'EUR',
+          currency: lineCurrency(item),
         },
         grossFallback: item.price,
         quantity: item.quantity,
-        currency: item.currency || 'EUR',
+        currency: lineCurrency(item),
       },
     ],
-    item.currency || 'EUR',
+    lineCurrency(item),
   );
 }
 
@@ -110,13 +119,13 @@ const orderPrice = computed<PriceVO>(() =>
           amount: tax.amount,
         })),
         brutto: lineGross(item),
-        currency: item.currency || 'EUR',
+        currency: lineCurrency(item),
       },
       grossFallback: item.price,
       quantity: item.quantity,
-      currency: item.currency || 'EUR',
+      currency: lineCurrency(item),
     })),
-    cart.items[0]?.currency || 'EUR',
+    cart.items[0]?.currency || appConfig.defaultCurrency,
   ),
 );
 const isHeterogeneous = computed(() => orderPrice.value.taxes.length > 1);

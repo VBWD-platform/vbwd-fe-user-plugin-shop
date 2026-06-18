@@ -70,6 +70,7 @@
             </span>
             <span class="cart-item__price">
               <PriceDisplay
+                convert-to-display
                 :net-amount="lineNet(item)"
                 :gross-amount="lineGross(item)"
                 :effective-display-mode="item.effectiveDisplayMode"
@@ -83,6 +84,7 @@
                  no fe-side tax math). Hidden for an untaxed/split-less line. -->
             <PriceBreakdown
               v-if="lineBreakdown(item).taxes.length > 0"
+              convert-to-display
               :price="lineBreakdown(item)"
               class="cart-item__breakdown"
               data-testid="cart-item-breakdown"
@@ -117,6 +119,7 @@
             data-testid="cart-item-subtotal"
           >
             <PriceDisplay
+              convert-to-display
               :net-amount="lineNet(item) * item.quantity"
               :gross-amount="lineGross(item) * item.quantity"
               :effective-display-mode="item.effectiveDisplayMode"
@@ -146,6 +149,7 @@
         >
           Subtotal ({{ cartStore.itemCount }} items):
           <PriceDisplay
+            convert-to-display
             :net-amount="orderPrice.netto"
             :gross-amount="orderPrice.brutto"
             :currency="orderPrice.currency || defaultCurrency"
@@ -169,6 +173,7 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from 'vbwd-view-component';
 import { useCartStore, type CartItem } from '../stores/cart';
+import { useAppConfigStore } from '@/stores/appConfig';
 import PriceDisplay from '@/components/PriceDisplay.vue';
 import PriceBreakdown from '@/components/PriceBreakdown.vue';
 import { aggregatePrice } from '@/utils/aggregatePrice';
@@ -177,10 +182,12 @@ import type { PriceVO } from '@/utils/priceDisplay';
 const cartStore = useCartStore();
 const authStore = useAuthStore();
 const router = useRouter();
+const appConfig = useAppConfigStore();
 
 // Each cart item carries the product's computed net/gross/taxes split (S85.4);
-// when absent (older carts) a line's net == gross == its bare ``price``.
-const defaultCurrency = 'EUR';
+// when absent (older carts) a line's net == gross == its bare ``price``. The
+// last-resort currency is the billing default (S99) — never a literal.
+const defaultCurrency = computed(() => appConfig.defaultCurrency);
 
 function itemKey(item: CartItem): string {
   return `${item.productId}-${item.variantId ?? 'default'}`;
@@ -208,14 +215,14 @@ function lineBreakdown(item: CartItem): PriceVO {
             amount: tax.amount,
           })),
           brutto: lineGross(item),
-          currency: item.currency || defaultCurrency,
+          currency: item.currency || defaultCurrency.value,
         },
         grossFallback: item.price,
         quantity: item.quantity,
-        currency: item.currency || defaultCurrency,
+        currency: item.currency || defaultCurrency.value,
       },
     ],
-    item.currency || defaultCurrency,
+    item.currency || defaultCurrency.value,
   );
 }
 
@@ -233,13 +240,13 @@ const orderPrice = computed<PriceVO>(() =>
           amount: tax.amount,
         })),
         brutto: lineGross(item),
-        currency: item.currency || defaultCurrency,
+        currency: item.currency || defaultCurrency.value,
       },
       grossFallback: item.price,
       quantity: item.quantity,
-      currency: item.currency || defaultCurrency,
+      currency: item.currency || defaultCurrency.value,
     })),
-    cartStore.items[0]?.currency || defaultCurrency,
+    cartStore.items[0]?.currency || defaultCurrency.value,
   ),
 );
 

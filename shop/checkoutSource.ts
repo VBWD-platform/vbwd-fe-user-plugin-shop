@@ -13,6 +13,7 @@ import {
 } from '@/registries/checkoutSourceRegistry';
 import { aggregatePrice } from '@/utils/aggregatePrice';
 import type { PriceVO } from '@/utils/priceDisplay';
+import { useAppConfigStore } from '@/stores/appConfig';
 import { useCartStore } from './stores/cart';
 
 // Coupon state for the shop source (the cart store persists items; the coupon
@@ -34,13 +35,15 @@ export const shopCheckoutSource: CheckoutSource = {
 
   getLineItems(): LineItem[] {
     const cart = useCartStore();
+    const billingCurrency = useAppConfigStore().defaultCurrency;
     return cart.items.map((item) => ({
       type: 'shop_product',
       id: item.productId,
       name: item.productName,
       price: item.price * item.quantity,
       quantity: item.quantity,
-      currency: item.currency || 'EUR',
+      // Resolve: the item's own currency, else the billing default (S99).
+      currency: item.currency || billingCurrency,
       total_price: String(item.price * item.quantity),
     }));
   },
@@ -56,6 +59,7 @@ export const shopCheckoutSource: CheckoutSource = {
   // sums them by code+rate. Display only — never recomputes tax.
   getTaxBreakdown(): PriceVO {
     const cart = useCartStore();
+    const billingCurrency = useAppConfigStore().defaultCurrency;
     return aggregatePrice(
       cart.items.map((item) => ({
         priceVO: {
@@ -66,13 +70,13 @@ export const shopCheckoutSource: CheckoutSource = {
             amount: tax.amount,
           })),
           brutto: item.grossAmount ?? item.price,
-          currency: item.currency || 'EUR',
+          currency: item.currency || billingCurrency,
         },
         grossFallback: item.price,
         quantity: item.quantity,
-        currency: item.currency || 'EUR',
+        currency: item.currency || billingCurrency,
       })),
-      'EUR',
+      billingCurrency,
     );
   },
 
@@ -100,6 +104,7 @@ export const shopCheckoutSource: CheckoutSource = {
 
   async submit(paymentMethodCode): Promise<CheckoutResult> {
     const cart = useCartStore();
+    const billingCurrency = useAppConfigStore().defaultCurrency;
     const payload: Record<string, unknown> = {
       items: cart.items.map((item) => ({
         product_id: item.productId,
@@ -131,7 +136,8 @@ export const shopCheckoutSource: CheckoutSource = {
         status: 'PENDING',
         amount: response.total,
         total_amount: response.total,
-        currency: 'EUR',
+        // The backend creates the invoice in the billing currency (S99).
+        currency: billingCurrency,
         line_items: [],
       },
       message: 'Order created',

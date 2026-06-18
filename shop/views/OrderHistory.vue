@@ -79,7 +79,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { formatMoney } from 'vbwd-view-component';
 import { api } from '@/api';
+import { useAppConfigStore } from '@/stores/appConfig';
 
 interface OrderSummary {
   id: string;
@@ -111,7 +113,8 @@ onMounted(fetchOrders);
 
 function formatPrice(price: string | number, currency: string): string {
   const num = typeof price === "string" ? parseFloat(price) : price;
-  return new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "EUR" }).format(num);
+  // Resolve: the order's own currency, else the billing default (S99).
+  return formatMoney(num, { currency: currency || useAppConfigStore().defaultCurrency });
 }
 
 function formatDate(dateString: string): string {

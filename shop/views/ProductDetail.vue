@@ -68,6 +68,7 @@
           data-testid="product-detail-price"
         >
           <PriceDisplay
+            convert-to-display
             :effective-display-mode="product.pricing?.effective_display_mode"
             :global-mode="product.pricing?.prices_display_mode"
             :net-amount="product.pricing?.net_amount ?? product.price"
