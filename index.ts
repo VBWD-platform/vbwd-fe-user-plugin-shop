@@ -4,7 +4,7 @@ import { shopCheckoutSource } from './shop/checkoutSource';
 
 export const shopPlugin: IPlugin = {
   name: 'shop',
-  version: '26.6',
+  version: '26.6.1',
   description: 'Shop — product catalog, cart, checkout, orders',
 
   install(sdk: IPlatformSDK) {
