@@ -71,6 +71,14 @@ export const shopPlugin: IPlugin = {
         // CMS plugin not installed — skip widget registration
       });
 
+    // S116.3 — labels for the storefront product-type specifications section.
+    sdk.addTranslations('en', {
+      shop: { specifications: 'Specifications', specYes: 'Yes', specNo: 'No' },
+    });
+    sdk.addTranslations('de', {
+      shop: { specifications: 'Spezifikationen', specYes: 'Ja', specNo: 'Nein' },
+    });
+
     // Register the shop checkout source so the generic public /checkout page
     // can purchase the shop cart without core knowing about ecommerce.
     checkoutSourceRegistry.register(shopCheckoutSource);
