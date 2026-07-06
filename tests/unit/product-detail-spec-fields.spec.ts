@@ -64,7 +64,6 @@ function makeTypedProduct(typeFieldValues: Record<string, unknown>) {
     variants: [],
     has_variants: false,
     stock_available: 5,
-    is_digital: false,
     weight: null,
     product_type_slug: 'pharma',
     type_field_values: typeFieldValues,
@@ -153,7 +152,7 @@ describe('ProductDetail type field rendering (S116.3)', () => {
     mockApi({
       id: 'prod-2', slug: 'widget', name: 'Widget', description: '',
       price: 9.5, currency: 'EUR', primary_image_url: null, images: [], variants: [],
-      has_variants: false, stock_available: 5, is_digital: false, weight: null,
+      has_variants: false, stock_available: 5, weight: null,
       product_type_slug: null, type_field_values: {},
     });
     const wrapper = await mountDetail();

@@ -41,7 +41,6 @@ function makeProduct(pricing: Record<string, unknown>) {
     variants: [],
     has_variants: false,
     stock_available: 5,
-    is_digital: false,
     weight: null,
     pricing,
   };
@@ -139,7 +138,7 @@ describe('ProductDetail price display (S72.4)', () => {
         // No ``price_float`` — exactly the post-S85.1 payload shape.
         price: 18.99, currency: 'EUR',
         primary_image_url: null, images: [], variants: [],
-        has_variants: false, stock_available: 5, is_digital: false, weight: null,
+        has_variants: false, stock_available: 5, weight: null,
         pricing: {
           net_amount: '18.99',
           gross_amount: '22.60',
@@ -175,7 +174,7 @@ describe('ProductDetail price display (S72.4)', () => {
         id: 'prod-2', slug: 'widget', name: 'Widget', description: '',
         price: 9.5, currency: 'EUR',
         primary_image_url: null, images: [], variants: [],
-        has_variants: false, stock_available: 5, is_digital: false, weight: null,
+        has_variants: false, stock_available: 5, weight: null,
       },
     });
     const wrapper = mount(ProductDetail, {
@@ -201,7 +200,7 @@ describe('ProductDetail price display (S72.4)', () => {
           id: 'var-1', name: 'Large', sku: 'W-L',
           price: '25.00', price_float: 25, attributes: {}, stock_available: 3,
         }],
-        has_variants: true, is_digital: false, weight: null,
+        has_variants: true, weight: null,
         pricing: { net_amount: '18.99', gross_amount: '22.60' },
       },
     });
@@ -223,7 +222,7 @@ describe('ProductDetail price display (S72.4)', () => {
         id: 'prod-1', slug: 'widget', name: 'Widget', description: '',
         price: 100, currency: 'EUR',
         primary_image_url: null, images: [], variants: [],
-        has_variants: false, stock_available: 5, is_digital: false, weight: null,
+        has_variants: false, stock_available: 5, weight: null,
       },
     });
     const wrapper = mount(ProductDetail, {

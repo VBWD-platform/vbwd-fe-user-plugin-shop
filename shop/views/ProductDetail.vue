@@ -203,7 +203,6 @@ interface ProductInfo {
   variants: ProductVariant[];
   has_variants: boolean;
   stock_available?: number;
-  is_digital: boolean;
   weight: string | null;
   // S72.4 netto/brutto display + S85.4 per-rate tax split
   pricing?: {
@@ -309,7 +308,8 @@ async function fetchProduct() {
     } else {
       stockCount.value = response.product.stock_available || 0;
     }
-    inStock.value = stockCount.value > 0 || response.product.is_digital;
+    inStock.value =
+      stockCount.value > 0 || response.product.product_type_slug === 'digital';
 
     if (response.product.product_type_slug) {
       await loadProductType(response.product.product_type_slug);
@@ -357,7 +357,7 @@ function handleAddToCart(): void {
     currency: product.value.currency,
     quantity: quantity.value,
     maxQuantity: stockCount.value || 999,
-    isDigital: product.value.is_digital,
+    isDigital: product.value.product_type_slug === 'digital',
     weight: parseFloat(product.value.weight || '0'),
     variantId: selectedVariantId.value || undefined,
     variantName: variant?.name,
