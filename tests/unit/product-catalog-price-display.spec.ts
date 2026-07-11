@@ -12,14 +12,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import { api } from '@/api';
 import ProductCatalog from '../../shop/views/ProductCatalog.vue';
 
 vi.mock('@/api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: {} }),
-  useRouter: () => ({ push: vi.fn() }),
-}));
 
 const i18n = createI18n({
   legacy: false,
@@ -43,10 +40,33 @@ function makeProduct(slug: string, pricing?: Record<string, unknown>) {
 }
 
 async function mountWithProducts(products: Array<Record<string, unknown>>) {
-  vi.mocked(api.get).mockResolvedValue({ products });
+  // Contract envelope: the list endpoint emits `items`, and the catalogue view
+  // fetches its (here empty) facet descriptor on mount.
+  vi.mocked(api.get).mockImplementation((url: string) => {
+    if (url.startsWith('/shop/filters')) return Promise.resolve({ facets: [] });
+    if (url.startsWith('/shop/products')) {
+      return Promise.resolve({
+        items: products,
+        total: products.length,
+        page: 1,
+        per_page: 12,
+        pages: 1,
+      });
+    }
+    return Promise.resolve({});
+  });
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/shop', name: 'shop-catalog', component: { template: '<div/>' } },
+      { path: '/shop/product/:slug', name: 'shop-product', component: { template: '<div/>' } },
+    ],
+  });
+  router.push('/shop');
+  await router.isReady();
   const wrapper = mount(ProductCatalog, {
     global: {
-      plugins: [i18n],
+      plugins: [i18n, router],
       stubs: { RouterLink: RouterLinkStub },
     },
   });
