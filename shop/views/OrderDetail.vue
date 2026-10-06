@@ -131,9 +131,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import { useAuthStore } from 'vbwd-view-component';
+import { useAuthStore, ApiError } from 'vbwd-view-component';
+import { api } from '@/api';
+import { useAppConfigStore } from '@/stores/appConfig';
 import PriceDisplay from '@/components/PriceDisplay.vue';
 import PriceBreakdown from '@/components/PriceBreakdown.vue';
 import { aggregatePrice } from '@/utils/aggregatePrice';
@@ -179,15 +181,42 @@ interface OrderInfo {
   tracking: TrackingInfo | null;
 }
 
-// The order is fed via an optional prop (a display-only seam mirrored by the
-// live fetch, so the netto/tax/brutto disclosure is unit-testable).
+/** ``GET /shop/orders/<id>`` wire shape (shop ``Order.to_dict``). */
+interface ApiOrderItem {
+  id: string;
+  quantity: number;
+  unit_price: string;
+  product_snapshot?: { name?: string } | null;
+}
+
+interface ApiOrder {
+  id: string;
+  order_number: string;
+  status: string;
+  subtotal?: string;
+  tax_amount?: string;
+  total_amount: string;
+  currency?: string;
+  created_at: string;
+  shipping_method?: string | null;
+  tracking_number?: string | null;
+  items: ApiOrderItem[];
+}
+
+// The API's owner scoping (403), an unknown id (404) and a bad request all read
+// "Order not found." — as on the themed page (theme_shop orders.py).
+const NOT_FOUND_STATUSES = [400, 403, 404];
+const ORDER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The order is fed via an optional prop (a display-only seam) or fetched from
+// the API for the routed id.
 const props = defineProps<{ order?: OrderInfo | null }>();
 
 const route = useRoute();
 const authStore = useAuthStore();
 const orderId = route.params.id as string;
 
-const loading = ref(false);
+const loading = ref(!props.order);
 const error = ref<string | null>(null);
 const fetchedOrder = ref<OrderInfo | null>(null);
 const order = computed<OrderInfo | null>(() => props.order ?? fetchedOrder.value);
@@ -252,8 +281,51 @@ function formatDate(dateString: string): string {
   });
 }
 
-// orderId is available for fetching logic
-void orderId;
+function toOrderInfo(apiOrder: ApiOrder): OrderInfo {
+  return {
+    id: apiOrder.id,
+    orderNumber: apiOrder.order_number,
+    status: apiOrder.status,
+    total: parseFloat(apiOrder.total_amount),
+    subtotal: apiOrder.subtotal === undefined ? undefined : parseFloat(apiOrder.subtotal),
+    taxAmount: apiOrder.tax_amount === undefined ? undefined : parseFloat(apiOrder.tax_amount),
+    // The order's own currency, else the billing default (as OrderHistory).
+    currency: apiOrder.currency || useAppConfigStore().defaultCurrency,
+    createdAt: apiOrder.created_at,
+    items: apiOrder.items.map((item) => ({
+      id: item.id,
+      productName: item.product_snapshot?.name ?? '',
+      quantity: item.quantity,
+      price: parseFloat(item.unit_price),
+    })),
+    tracking: apiOrder.tracking_number
+      ? { carrier: apiOrder.shipping_method ?? '', trackingNumber: apiOrder.tracking_number }
+      : null,
+  };
+}
+
+async function fetchOrder(): Promise<void> {
+  try {
+    const response = await api.get(`/shop/orders/${orderId}`) as { order: ApiOrder };
+    fetchedOrder.value = toOrderInfo(response.order);
+  } catch (fetchError) {
+    const notFound = fetchError instanceof ApiError && NOT_FOUND_STATUSES.includes(fetchError.status);
+    if (!notFound) {
+      error.value = (fetchError as Error).message || 'Failed to load order';
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(() => {
+  if (props.order) return;
+  if (!ORDER_ID_PATTERN.test(orderId)) {
+    loading.value = false;
+    return;
+  }
+  void fetchOrder();
+});
 </script>
 
 <style scoped>
