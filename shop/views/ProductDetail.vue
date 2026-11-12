@@ -174,11 +174,13 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { api } from '@/api';
+import { useAppConfigStore } from '@/stores/appConfig';
 import { useCartStore } from '../stores/cart';
 import { useProductTypeStore } from '../stores/productTypes';
 import type { ProductType, ProductTypeField } from '../api/productTypes';
 import PriceDisplay from '@/components/PriceDisplay.vue';
 import { TagChips, CustomFieldsDisplay, type CustomFieldDef } from 'vbwd-view-component';
+import { applySeoHead, productSeoSource } from '../seoHead';
 
 interface ProductVariant {
   id: string;
@@ -219,6 +221,9 @@ interface ProductInfo {
   // S116 — product-type reference (nullable = base product) + its field values.
   product_type_slug?: string | null;
   type_field_values?: Record<string, unknown>;
+  // S154 D7 — the `seo_index_products` switch; absent on an older backend
+  // reads as indexable.
+  seo_indexable?: boolean;
 }
 
 /** One resolved specification row: a type field paired with its stored value. */
@@ -230,6 +235,7 @@ interface SpecEntry {
 const route = useRoute();
 const cartStore = useCartStore();
 const productTypeStore = useProductTypeStore();
+const appConfig = useAppConfigStore();
 const { t } = useI18n();
 const productSlug = route.params.slug as string;
 
@@ -319,6 +325,19 @@ async function fetchProduct() {
   } finally {
     loading.value = false;
   }
+  await applyProductSeoHead();
+}
+
+const NOT_FOUND_HEAD = { robots: 'noindex,follow' };
+
+/** The product's own head (S154 P5), or forced noindex when it is not found. */
+async function applyProductSeoHead(): Promise<void> {
+  if (!product.value) {
+    await applySeoHead(NOT_FOUND_HEAD);
+    return;
+  }
+  await appConfig.load();
+  await applySeoHead(productSeoSource(product.value, appConfig.siteName));
 }
 
 function handleAddToCart(): void {

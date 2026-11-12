@@ -170,7 +170,9 @@ import { useRoute } from 'vue-router';
 import { useCatalogueFilters, CatalogueFilterBar } from 'vbwd-view-component';
 import type { FacetDescriptor, FacetOption } from 'vbwd-view-component';
 import { api } from '@/api';
+import { useAppConfigStore } from '@/stores/appConfig';
 import PriceDisplay from '@/components/PriceDisplay.vue';
+import { applySeoHead, categorySeoSource, type CategorySeoEntity } from '../seoHead';
 
 interface ProductListItem {
   id: string;
@@ -208,6 +210,7 @@ const DEFAULT_PER_PAGE = 12;
 const API_PREFIX = '/api/v1';
 
 const route = useRoute();
+const appConfig = useAppConfigStore();
 const perPage = computed(() => props.items_per_page ?? DEFAULT_PER_PAGE);
 const filters = useCatalogueFilters({ perPage });
 
@@ -296,6 +299,26 @@ function onTagToggle(slug: string): void {
   filters.toggleTag(slug);
 }
 
+/**
+ * S154 P5 — a category-page entry (`/shop/category/:slug`) gets its own SEO
+ * head over the `shop` template page's head (the vue counterpart of
+ * theme_shop's `SeoOverrides` category_context). The bare `/shop` listing has
+ * no route slug and keeps the template page's own head, untouched.
+ */
+async function applyCategorySeoHead(categorySlug: string): Promise<void> {
+  try {
+    const response = await api.get(`/shop/categories/${encodeURIComponent(categorySlug)}`) as {
+      category: CategorySeoEntity;
+    };
+    await appConfig.load();
+    await applySeoHead(categorySeoSource(response.category, appConfig.siteName));
+  } catch {
+    // Unknown category — the listing UI is unchanged (still its own empty
+    // state), but the page must not be indexed.
+    await applySeoHead({ robots: 'noindex,follow' });
+  }
+}
+
 onMounted(async () => {
   await loadFacets();
   // Category-page entry: seed the category facet from the route param so it
@@ -304,9 +327,12 @@ onMounted(async () => {
   if (categorySlug && !filters.facet('category')) {
     // Pushes the URL query; the watcher below performs the initial product load.
     filters.setFacet('category', categorySlug);
-    return;
+  } else {
+    await loadProducts();
   }
-  await loadProducts();
+  if (categorySlug) {
+    await applyCategorySeoHead(categorySlug);
+  }
 });
 
 // The URL query is the single source of truth: any filter/pagination change
